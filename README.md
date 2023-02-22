@@ -1,11 +1,12 @@
 (c) Matias Henttunen 2023
 
-#Beckhoff EAP read/write tool#
+Beckhoff EAP read/write tool
+----------------------------
 EAP = EtherCat Automation Protocol
 This tool can be used for reading/writing EAP variables from a linux system.
 
 
-#Notes#
+Notes
 --------
 This software will most probably not work on non linux systems without modifications
 
