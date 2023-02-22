@@ -1,5 +1,9 @@
 #ifndef FRAMES_H
 #define FRAMES_H
+/*
+ * (c) 2023 Matias Henttunen
+ * mattimob@gmail.com
+ * */
 #include <stdint.h>
 
 #define BUF_SIZ         4096

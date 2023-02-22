@@ -1,3 +1,7 @@
+/*
+ * (c) 2023 Matias Henttunen
+ * mattimob@gmail.com
+ * */
 #include "eth.h"
 #include "protocol.h"
 #include "frames.h"

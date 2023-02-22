@@ -1,3 +1,7 @@
+/*
+ * (c) 2023 Matias Henttunen
+ * mattimob@gmail.com
+ * */
 #include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
