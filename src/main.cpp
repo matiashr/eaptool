@@ -37,9 +37,9 @@ static void help(char* app )
 		printf("flags:\n");
 		printf("   -i <device>          ; network device to use, example eth0 \n");
 		printf("   -p <addr>            ; set EAP publisher id\n");
-		printf("   -p 00:01:00:0e:10:02 ; example id \n");
+		printf("   -p 00:01:00:0e:10:02 ; publisher id (example id) \n");
 		printf("   -b                   ; background worker\n");
-		printf("   -l                   ; sniff\n");
+		printf("   -l                   ; sniff mode\n");
 		printf("   -r                   ; raw mode\n");
 		printf("   -v                   ; verbose \n");
 		printf("   -r <no>              ; read no \n");

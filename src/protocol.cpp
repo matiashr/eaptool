@@ -13,10 +13,10 @@
 
 EapProtocol::EapProtocol(std::string interface):
 		m_if(interface),
-		m_setup(false),
-		m_verbose(false),
+		m_version(3),
 		cycleIndex(0),
-		m_version(3)
+		m_setup(false),
+		m_verbose(false)
 {
 	publisherId[0] = 1;
 	publisherId[1] = 2;
@@ -100,81 +100,87 @@ bool EapProtocol::setNetworkVariable(MacAddress& addr, Variable& value )
 {
 		bool status=false;
 		int stat;
-		int tx_len = 0;
+		int framesize = 0;
 		char sendbuf[1500];
-		struct ether_header *eh = (struct ether_header *) sendbuf;
-		struct eapframe* iframe;
+		struct eapframe* eapframe;
 		struct networkvar* nvar;
 
 		/* Construct the Ethernet header */
 		memset(sendbuf, 0, BUF_SIZ);
-		tx_len = 0;
+		framesize = 0;
 
 		/* Address length*/
 		socket_address.sll_ifindex = if_idx.ifr_ifindex;
 		socket_address.sll_halen = ETH_ALEN;
 
-		iframe = (struct eapframe*)&sendbuf[tx_len];
-		tx_len = sizeof(struct eapframe);
+		eapframe = (struct eapframe*)&sendbuf[framesize];
+		framesize = sizeof(struct eapframe);
 		/* set dst mac */
-		iframe->dst[0] = addr.a;
-		iframe->dst[1] = addr.b;
-		iframe->dst[2] = addr.c;
-		iframe->dst[3] = addr.d;
-		iframe->dst[4] = addr.e;
-		iframe->dst[5] = addr.f;
+		eapframe->dst[0] = addr.a;
+		eapframe->dst[1] = addr.b;
+		eapframe->dst[2] = addr.c;
+		eapframe->dst[3] = addr.d;
+		eapframe->dst[4] = addr.e;
+		eapframe->dst[5] = addr.f;
 
 		/* set  source mac */
-		iframe->src[0] = if_mac.ifr_hwaddr.sa_data[0];
-		iframe->src[1] = if_mac.ifr_hwaddr.sa_data[1];
-		iframe->src[2] = if_mac.ifr_hwaddr.sa_data[2];
-		iframe->src[3] = if_mac.ifr_hwaddr.sa_data[3];
-		iframe->src[4] = if_mac.ifr_hwaddr.sa_data[4];
-		iframe->src[5] = if_mac.ifr_hwaddr.sa_data[5];
+		eapframe->src[0] = if_mac.ifr_hwaddr.sa_data[0];
+		eapframe->src[1] = if_mac.ifr_hwaddr.sa_data[1];
+		eapframe->src[2] = if_mac.ifr_hwaddr.sa_data[2];
+		eapframe->src[3] = if_mac.ifr_hwaddr.sa_data[3];
+		eapframe->src[4] = if_mac.ifr_hwaddr.sa_data[4];
+		eapframe->src[5] = if_mac.ifr_hwaddr.sa_data[5];
 		// Type 
-		iframe->type = htons(PROTOCOL_ID);
+		eapframe->type = htons(PROTOCOL_ID);
 
-		iframe->echeader.length = 4;
-		iframe->echeader.type = NETWORK_VAR;
-		iframe->networkvars.publisher[0] = publisherId[0];
-		iframe->networkvars.publisher[1] = publisherId[1];
-		iframe->networkvars.publisher[2] = publisherId[2];
-		iframe->networkvars.publisher[3] = publisherId[3];
-		iframe->networkvars.publisher[4] = publisherId[4];
-		iframe->networkvars.publisher[5] = publisherId[5];
-		iframe->networkvars.cycleix = htons(cycleIndex++);
-		iframe->networkvars.count = 1;
+		eapframe->echeader.length = 4;
+		eapframe->echeader.type = NETWORK_VAR;
+		eapframe->networkvars.publisher[0] = publisherId[0];
+		eapframe->networkvars.publisher[1] = publisherId[1];
+		eapframe->networkvars.publisher[2] = publisherId[2];
+		eapframe->networkvars.publisher[3] = publisherId[3];
+		eapframe->networkvars.publisher[4] = publisherId[4];
+		eapframe->networkvars.publisher[5] = publisherId[5];
+		eapframe->networkvars.cycleix = htons(cycleIndex++);
+		eapframe->networkvars.count = 1;
 		nvar =  (struct networkvar*)( sendbuf + sizeof(struct eapframe) );
-		for(size_t i=0;i<iframe->networkvars.count;i++) {
-				uint8_t *payload =  &nvar->d;
-				nvar->nvheader.len = 1;
+		for(size_t i=0;i<eapframe->networkvars.count;i++) {
+				nvar->nvheader.len = value.size;
 				nvar->nvheader.id  = value.id;
 				switch( value.size )
 				{ 
-						case sizeof(uint8_t): *((uint32_t*)(payload)) = value.value.u8 ; break;
-						case sizeof(uint16_t): *((uint32_t*)(payload)) = value.value.u32; break;
+						case sizeof(uint8_t):{
+													 uint8_t *payload =  (uint8_t*)&nvar->d;
+													 *((uint8_t*)(payload)) = value.value.u8 ;
+											 }break;
+						case sizeof(uint16_t):{
+													 uint16_t *payload =  (uint16_t*)&nvar->d;
+													  *((uint16_t*)(payload)) = value.value.u32; 
+											  }break;
 						case sizeof(uint32_t):
-					    {
-							   *((uint32_t*)(payload)) = value.value.u32; 
-						}break;
+											  {
+													 uint32_t *payload =  (uint32_t*) &nvar->d;
+													 *((uint32_t*)(payload)) = value.value.u32; 
+											  }break;
 						default:
-						{
-							printf("Unsupported type size %d\n", value.size );
-							return false;
-						}break;
+											  {
+													  printf("Unsupported type size %ld\n", value.size );
+													  return false;
+											  }break;
 				}
-				tx_len += sizeof(struct networkvar);
+				framesize += sizeof(struct networkvar);
+				framesize += value.size;
 		}
 		if( m_verbose )  {
 				printf(FRAMEFMT);
 				printf("[");
-				for(int i=0;i < tx_len;i++ ) {
+				for(int i=0;i < framesize;i++ ) {
 						printf("%2x, ",sendbuf[i] &0xff);
 				}
-				printf("]:%d bytes\n", tx_len);
+				printf("]:%d bytes\n", framesize);
 		}
-		if( stat=sendto(m_sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0) {
-				printf("Socket:%d len:%d errorcode=%d\n", m_sockfd, tx_len,  stat );
+		if( (stat=sendto(m_sockfd, sendbuf, framesize, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll))) < 0) {
+				printf("Socket:%d len:%d errorcode=%d\n", m_sockfd, framesize,  stat );
 				perror("Send header ");
 				exit(1);
 		}
@@ -183,34 +189,32 @@ bool EapProtocol::setNetworkVariable(MacAddress& addr, Variable& value )
 
 int EapProtocol::parse_frame( int numbytes, uint8_t* buf, MacAddress& a_mac, Variable& r_value )
 {
-	struct sockaddr_storage their_addr;
-	struct eapframe *iframe = (struct eapframe*) (buf);
+	struct eapframe *eapframe = (struct eapframe*) (buf);
 	struct networkvar *nvar = (struct networkvar*)( sizeof(struct eapframe) + buf );
-	int i;
-	int ret;
+	size_t i;
 
 	/* Check the packet is from a_mac node */
 	{
 		int match=1;
-		if( (iframe->src[0] != a_mac.a) &&  
-			(iframe->src[1] != a_mac.b) &&
-			(iframe->src[2] != a_mac.c) &&
-			(iframe->src[3] != a_mac.d) &&
-			(iframe->src[4] != a_mac.e) &&
-			(iframe->src[5] != a_mac.f) 
+		if( (eapframe->src[0] != a_mac.a) &&  
+			(eapframe->src[1] != a_mac.b) &&
+			(eapframe->src[2] != a_mac.c) &&
+			(eapframe->src[3] != a_mac.d) &&
+			(eapframe->src[4] != a_mac.e) &&
+			(eapframe->src[5] != a_mac.f) 
 		) {
-				//printf("%d (%x != %x )\n",i, a_mac[i], iframe->src[i] );
+				//printf("%d (%x != %x )\n",i, a_mac[i], eapframe->src[i] );
 				match = 0;
 		}
 		if(match == 0) {
 			 return -1;
 		}
 	}
-	if( ntohs(iframe->type) == PROTOCOL_ID ) {
+	if( ntohs(eapframe->type) == PROTOCOL_ID ) {
 			if ( m_verbose) {
 					printf("\033[1;0H\n");
-					printf("Type: 0x%x (EAP)\n", iframe->type );	
-					printf("Len : 0x%x\n", iframe->echeader.length );
+					printf("Type: 0x%x (EAP)\n", eapframe->type );	
+					printf("Len : 0x%x\n", eapframe->echeader.length );
 					printf("DST : ");
 					for (i=0; i< 6; i++){
 							printf("%02x:", buf[i]);
@@ -221,19 +225,19 @@ int EapProtocol::parse_frame( int numbytes, uint8_t* buf, MacAddress& a_mac, Var
 							printf("%02x:", buf[i]);
 					}
 					printf("\n");
-					printf("valid: 0x%x\n", iframe->echeader.valid );
-					printf("type : 0x%x\n", iframe->echeader.type &0xf );
-					printf("cycleix : 0x%x\n", iframe->networkvars.cycleix);
+					printf("valid: 0x%x\n", eapframe->echeader.valid );
+					printf("type : 0x%x\n", eapframe->echeader.type &0xf );
+					printf("cycleix : 0x%x\n", eapframe->networkvars.cycleix);
 					printf("publisher:");
-					for(i=1;i<sizeof(iframe->networkvars.publisher);i++) {
-							printf("%d.", iframe->networkvars.publisher[i] );
+					for(i=1;i<sizeof(eapframe->networkvars.publisher);i++) {
+							printf("%d.", eapframe->networkvars.publisher[i] );
 					}
-					printf("varcnt: %d\n", iframe->networkvars.count);
+					printf("varcnt: %d\n", eapframe->networkvars.count);
 			}
-			for(i=0;i<iframe->networkvars.count;i++) {
+			for(i=0;i<eapframe->networkvars.count;i++) {
 					r_value.id = (nvar[i].nvheader.id);
 					if (m_verbose ) {
-							printf("VAR %d id=%d length:%d quality:%x\n", 
+							printf("VAR %ld id=%d length:%d quality:%x\n", 
 											i,
 											(nvar[i].nvheader.id), 
 											nvar[i].nvheader.len, 
@@ -272,18 +276,16 @@ int EapProtocol::parse_frame( int numbytes, uint8_t* buf, MacAddress& a_mac, Var
  * */
 int EapProtocol::parse_frames(int numbytes, uint8_t* buf, MacAddress& a_mac, std::vector<Variable*>& r_values )
 {
-		struct sockaddr_storage their_addr;
-		struct eapframe *iframe = (struct eapframe*) (buf);
+		struct eapframe *eapframe = (struct eapframe*) (buf);
 		struct networkvar *nvar = (struct networkvar*)( sizeof(struct eapframe) + buf );
 		int i;
-		int ret;
 		int match=1;
-		if( (iframe->src[0] != a_mac.a) &&  
-						(iframe->src[1] != a_mac.b) &&
-						(iframe->src[2] != a_mac.c) &&
-						(iframe->src[3] != a_mac.d) &&
-						(iframe->src[4] != a_mac.e) &&
-						(iframe->src[5] != a_mac.f) 
+		if( (eapframe->src[0] != a_mac.a) &&  
+						(eapframe->src[1] != a_mac.b) &&
+						(eapframe->src[2] != a_mac.c) &&
+						(eapframe->src[3] != a_mac.d) &&
+						(eapframe->src[4] != a_mac.e) &&
+						(eapframe->src[5] != a_mac.f) 
 		  ) {
 				match = 0;
 		}
@@ -291,8 +293,8 @@ int EapProtocol::parse_frames(int numbytes, uint8_t* buf, MacAddress& a_mac, std
 				return 0;
 		}
 
-		if( ntohs(iframe->type) == PROTOCOL_ID ) {
-				for(i=0;i<iframe->networkvars.count;i++) {
+		if( ntohs(eapframe->type) == PROTOCOL_ID ) {
+				for(i=0;i<eapframe->networkvars.count;i++) {
 						Variable* var = new Variable();
 						var->id = (nvar[i].nvheader.id);
 						switch( nvar[i].nvheader.len )
@@ -318,7 +320,7 @@ int EapProtocol::parse_frames(int numbytes, uint8_t* buf, MacAddress& a_mac, std
 						}
 						r_values.push_back( var );
 				}
-				return iframe->networkvars.count;
+				return eapframe->networkvars.count;
 		}
 
 		return 0;
@@ -490,6 +492,7 @@ bool EapProtocol::waitMessage()
 	Reciever rx("tcp://localhost:5555");
 	rx.recieve("/eap");
 	rx.run();
+	return true;
 }
 
 

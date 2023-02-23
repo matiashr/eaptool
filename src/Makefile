@@ -1,19 +1,21 @@
 OBJS=main.o eth.o protocol.o
-LIBS=-lpthread ../dependencies/moderncpp.git/libmf.a -lzmq
+LIBS=-lpthread ../dependencies/moderncpp.git/libmf.a -lzmq 
 
-INCLUDE= -I ../dependencies/json/include/nlohmann/ \
+FLAGS=-g -Wall
+INCLUDE=\
+	-I ../dependencies/json/include/nlohmann/ \
     -I ../dependencies/json/include/\
     -I ../dependencies/moderncpp.git/include/\
 
 
 %.o:%.c
-	gcc -g $(INCLUDE) -c $< -o $@
+	gcc $(FLAGS) $(INCLUDE) -c $< -o $@
 
 %.o:%.cpp
-	g++ -g $(INCLUDE) -c $< -o $@
+	g++ $(FLAGS) $(INCLUDE) -c $< -o $@
 
 eaptool:$(OBJS)
-	g++ -g $(OBJS) $(LIBS) -o eaptool
+	g++ $(FLAGS) $(OBJS) $(LIBS) -o eaptool
 
 all: eaptool
 

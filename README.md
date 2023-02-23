@@ -20,6 +20,11 @@ make -C dependencies/moderncpp.git lib
 cd src; make
 
 
+dependencies
+-------------
+nlohman::json
+libzmq
+
 Notes
 --------
 This software will most probably not work on non linux systems without modifications
