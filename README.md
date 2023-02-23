@@ -25,4 +25,7 @@ This software will most probably not work on non linux systems without modificat
 
 EAP traffic is flooding data, so ensure your network can handle this.
 
+Twincat3 has extended the format of networkvariables
+[ publish id|cnt | cycle | res| eapSM ]
 
+[ res | toggle | err | stat ]

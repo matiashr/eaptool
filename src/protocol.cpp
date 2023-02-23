@@ -2,17 +2,28 @@
  * (c) 2023 Matias Henttunen
  * mattimob@gmail.com
  * */
+#include <vector>
+#include <map>
 #include "eth.h"
 #include "protocol.h"
 #include "frames.h"
+#include <nlohmann/json.hpp>
+#include <zmq.hpp>
+#include "mcp/queue.h"
 
 EapProtocol::EapProtocol(std::string interface):
 		m_if(interface),
 		m_setup(false),
 		m_verbose(false),
-		cycleIndex(0)
+		cycleIndex(0),
+		m_version(3)
 {
-
+	publisherId[0] = 1;
+	publisherId[1] = 2;
+	publisherId[2] = 3;
+	publisherId[3] = 4;
+	publisherId[4] = 5;
+	publisherId[5] = 6;
 }
 
 EapProtocol::~EapProtocol()
@@ -25,11 +36,32 @@ void EapProtocol::setVerbose(bool s)
 	m_verbose=s;
 }
 
+void EapProtocol::setPublisherId( int id[6] )
+{
+	publisherId[0] = id[0];
+	publisherId[1] = id[1];
+	publisherId[2] = id[2];
+	publisherId[3] = id[3];
+	publisherId[4] = id[4];
+	publisherId[5] = id[5];
+	printf("Publisher: %2x:%2x:%2x:%2x:%2x:%2x\n", 
+					id[0],
+					id[1],
+					id[2],
+					id[3],
+					id[4],
+					id[5]);
+}
 
 bool EapProtocol::close()
 {
 		::close(m_sockfd);
 		return true;
+}
+
+void EapProtocol::setEapVersion( uint32_t ver )
+{
+		m_version = ver;
 }
 
 bool EapProtocol::setup()
@@ -103,13 +135,13 @@ bool EapProtocol::setNetworkVariable(MacAddress& addr, Variable& value )
 		iframe->type = htons(PROTOCOL_ID);
 
 		iframe->echeader.length = 4;
-		iframe->echeader.type = 4;
-		iframe->networkvars.publisher[0] = 1;
-		iframe->networkvars.publisher[1] = 2;
-		iframe->networkvars.publisher[2] = 3;
-		iframe->networkvars.publisher[3] = 4;
-		iframe->networkvars.publisher[4] = 5;
-		iframe->networkvars.publisher[5] = 6;
+		iframe->echeader.type = NETWORK_VAR;
+		iframe->networkvars.publisher[0] = publisherId[0];
+		iframe->networkvars.publisher[1] = publisherId[1];
+		iframe->networkvars.publisher[2] = publisherId[2];
+		iframe->networkvars.publisher[3] = publisherId[3];
+		iframe->networkvars.publisher[4] = publisherId[4];
+		iframe->networkvars.publisher[5] = publisherId[5];
 		iframe->networkvars.cycleix = htons(cycleIndex++);
 		iframe->networkvars.count = 1;
 		nvar =  (struct networkvar*)( sendbuf + sizeof(struct eapframe) );
@@ -233,6 +265,65 @@ int EapProtocol::parse_frame( int numbytes, uint8_t* buf, MacAddress& a_mac, Var
 	return 0;
 }
 
+/*
+ *	Network vars may contain multiple values
+ *	parse all and return in list
+ *
+ * */
+int EapProtocol::parse_frames(int numbytes, uint8_t* buf, MacAddress& a_mac, std::vector<Variable*>& r_values )
+{
+		struct sockaddr_storage their_addr;
+		struct eapframe *iframe = (struct eapframe*) (buf);
+		struct networkvar *nvar = (struct networkvar*)( sizeof(struct eapframe) + buf );
+		int i;
+		int ret;
+		int match=1;
+		if( (iframe->src[0] != a_mac.a) &&  
+						(iframe->src[1] != a_mac.b) &&
+						(iframe->src[2] != a_mac.c) &&
+						(iframe->src[3] != a_mac.d) &&
+						(iframe->src[4] != a_mac.e) &&
+						(iframe->src[5] != a_mac.f) 
+		  ) {
+				match = 0;
+		}
+		if(match == 0) {
+				return 0;
+		}
+
+		if( ntohs(iframe->type) == PROTOCOL_ID ) {
+				for(i=0;i<iframe->networkvars.count;i++) {
+						Variable* var = new Variable();
+						var->id = (nvar[i].nvheader.id);
+						switch( nvar[i].nvheader.len )
+						{
+								case 1:
+										{
+												uint8_t *payload = (uint8_t*)( &nvar[i].d );
+												var->value.u32 = *payload;
+												var->size = nvar[i].nvheader.len;
+										}break;
+								case 4:
+										{
+												uint32_t *payload = (uint32_t*)( &nvar[i].d );
+												var->value.u32 = *payload;
+												var->size = nvar[i].nvheader.len;
+										}break;
+								default:
+										{
+												printf("unexpected size %d\n", nvar[i].nvheader.len);
+												var->size = nvar[i].nvheader.len;
+												return 0;
+										}break;
+						}
+						r_values.push_back( var );
+				}
+				return iframe->networkvars.count;
+		}
+
+		return 0;
+}
+
 bool EapProtocol::getNetworkVariable(MacAddress& addr, Variable& r_value )
 {
 		bool status=true;
@@ -288,5 +379,118 @@ void EapProtocol::sniff()
 		}
 
 }
+
+void EapProtocol::start( MacAddress& addr)
+{	
+	m_quit = false;
+	m_worker = std::thread(process, this);
+	m_workerMac = addr;
+}
+
+void EapProtocol::wait()
+{	
+		m_worker.join();
+		printf("Terminated\n");
+}
+
+
+using json = nlohmann::json;
+class MyReciver: public ServerCommand
+{
+    public:
+        bool rxMessage( std::string msg, std::string& r_resp ) {
+            json j;
+            j["status"] = "Yeah";
+            r_resp = j.dump();
+            return true;
+        }
+};
+
+/*************************************************************************************
+ *	External interface 
+ * for communicating with other process:es using zmq
+ *
+ *************************************************************************************/
+
+/*
+ * create thread
+ * and parse frames as they are recived
+ * does the following:
+ * 1.keep a list of frames recieved
+ * 2.on value change publish zmq message
+ * 
+ * */
+void EapProtocol::process(EapProtocol* self)
+{
+	uint8_t buf[BUF_SIZ];
+	printf("start background thread\n");
+	//std::vector <Variable*> recieved;
+	std::map<uint32_t, Variable*> recieved;
+	IPCBroadcaster srv("tcp://*:5555" );
+	srv.run();
+	while(!self->m_quit)
+		{
+				int numbytes = recvfrom(self->m_sockfd, buf, sizeof(buf), 0, NULL, NULL);
+				if( numbytes > 0 ) {
+						int no=0;
+						std::vector <Variable*> rx;
+						if( (no=self->parse_frames( numbytes,  buf,  self->m_workerMac, rx)) > 0 ) {
+								for( auto var : rx ) {
+										std::map<uint32_t,Variable* >::iterator item = recieved.find(var->id);
+										if( item != recieved.end()) { 
+												if( item->second->value.u32 != var->value.u32 ) {
+														item->second->value.u32 = var->value.u32 ;
+														json j;
+														j["id"] = var->id;
+														j["size"] = var->size;
+														j["value"] = var->value.u32;
+														if( self->m_verbose ) {
+																printf("%d = %d\n", var->id, var->value.u32  );
+														}
+														try{
+																std::string data = j.dump();
+																srv.send("/eap", data );
+														}catch( ... ) {
+																printf("Update failed\n");
+														}
+												}
+										} else {
+												/* variable not previously in list =>add it*/
+												Variable* newvar = new Variable();
+												newvar->id = var->id;
+												newvar->size = var->size;
+												newvar->value.u32 = var->value.u32;
+												recieved[var->id] = newvar ;
+										}
+								}
+						}
+						if( rx.size() > 0 ) {
+								rx.clear();
+						}
+				} 
+		}
+}
+
+
+class Reciever : public IPCReciever
+{
+    public:
+        Reciever( std::string a_listen ) : IPCReciever(a_listen){
+		};
+        ~Reciever() {
+		};
+		void onMessage( std::string topic, std::string data ) {
+			printf("%s\n", data.c_str());
+		}
+
+};
+
+bool EapProtocol::waitMessage()
+{
+	Reciever rx("tcp://localhost:5555");
+	rx.recieve("/eap");
+	rx.run();
+}
+
 
 /* vim: set foldmethod=syntax:set list! */

@@ -15,6 +15,9 @@
 
 #define PROTOCOL_ID     0x88A4 //ethercat
 
+#define NETWORK_VAR 4
+
+
 struct eapframe {
 	uint8_t dst[6];
 	uint8_t src[6];

@@ -31,28 +31,38 @@ static int raw=0;
 
 static void help(char* app )
 {
-		printf("Usage: %s -i <eth0,1..> -m <mac> -h -l\n",app );
+		printf("Usage:\n");
+		printf(" sudo %s <flags> ",app);
+		printf("\n");
 		printf("flags:\n");
 		printf("   -i <device>          ; network device to use, example eth0 \n");
+		printf("   -p <addr>            ; set EAP publisher id\n");
+		printf("   -p 00:01:00:0e:10:02 ; example id \n");
+		printf("   -b                   ; background worker\n");
 		printf("   -l                   ; sniff\n");
 		printf("   -r                   ; raw mode\n");
 		printf("   -v                   ; verbose \n");
 		printf("   -r <no>              ; read no \n");
 		printf("   -t <no> <value>      ; write no=value\n");
-		printf("   -m 00:01:05:2e:1e:b2 ; listen to mac \n");
 		printf("   -m <mac>             ; listen for data from node with mac, giving mac of all zeros will show all nodes, ignoring src mac \n");
+		printf("   -m 00:01:05:2e:1e:b2 ; example mac \n");
+
+		printf("note: provided mac addresses, set all bytes i.e. 00:01...\n");
 		printf("Examples:\n");
-		printf("note: must provide all characters for mac addresses, i.e. 00:01... not 0:1:...\n");
-		printf("Example: sudo ./%s -i enx9884e302236a -t \"123 456\" - Send nvid 123 = 456\n",app);
-		printf("Example: sudo ./%s -i enx9884e302236a -R 123 - Read nvid 123\n",app);
+		printf(" sudo %s -i enx9886e302239a -t \"123 461\" ; Send nvid 123 = 461\n",app);
+		printf(" sudo %s -i enx9885e302240a -R 125 ;  Read nvid 125\n",app);
+		printf(" sudo %s -i enp1s0 -b ; start in background\n", app);
 
 }
 
 int main(int argc, char *argv[])
 {
+		int publisherId[6];
 		MacAddress dst;
+		bool setpublisher=false;
 		bool verbose=false;
-		enum {  SNIFF, SEND,READ }todo = SNIFF;
+		bool usethread=false;
+		enum {  SNIFF, SEND,READ, BACKGROUND, READQ }todo = SNIFF;
 		char ifName[10];
 		int  readvar=NULL;
 		char* txdata=NULL;
@@ -71,9 +81,30 @@ int main(int argc, char *argv[])
 		dst.f = MY_DEST_MAC5;
 
 		strcpy(ifName, DEFAULT_IF);
-		while ((c = getopt (argc, argv, "i:lhm:t:rR:v")) != -1) {
+		while ((c = getopt (argc, argv, "i:lhm:t:rR:vbp:q")) != -1) {
 				switch (c)
 				{
+						case 'q':
+								{
+										todo = READQ;
+								}break;
+						case 'p':
+								{
+										sscanf(optarg,"%2x:%2x:%2x:%2x:%2x:%2x",
+														&publisherId[0],  
+														&publisherId[1],  
+														&publisherId[2],  
+														&publisherId[3],  
+														&publisherId[4],  
+														&publisherId[5]
+											  );
+										setpublisher=true;
+								}break;
+						case 'b':
+								{
+										usethread=true;
+										todo = BACKGROUND;
+								}break;
 						case 'v':
 								{
 										verbose=true;
@@ -126,6 +157,12 @@ int main(int argc, char *argv[])
 		EapProtocol p(ifName);
 		p.setup();
 		p.setVerbose(verbose);
+		if( usethread ) {
+				p.start(dst);
+		}
+		if( setpublisher) {
+				p.setPublisherId(publisherId);
+		}
 		switch( todo)
 		{
 				case READ:
@@ -165,6 +202,15 @@ int main(int argc, char *argv[])
 						{
 								p.sniff();
 						}break;
+				case BACKGROUND:
+						{
+								p.wait();
+						}break;
+				case READQ:
+						{
+								p.waitMessage();
+						}break;
+
 		}
 		return 0;
 }

@@ -14,7 +14,8 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/ether.h>
-
+#include <thread>
+#include <vector>
 #include <string>
 
 class Variable
@@ -60,11 +61,24 @@ class EapProtocol
 			bool setup();
 			bool close();
 			void setVerbose(bool s);
+			void setEapVersion( uint32_t ver );
+	public:	// Single variable read/write interface
+			void setPublisherId( int id[6] );
 			bool setNetworkVariable( MacAddress& addr, Variable& value );
 			bool getNetworkVariable( MacAddress& addr, Variable& r_value );
+	public:	
 			void sniff();
+			void start( MacAddress& addr);
+			void wait();
+			static void process(EapProtocol*);
+			bool waitMessage();
+	private:
+			bool m_quit;
+			std::thread m_worker;
+			MacAddress m_workerMac;
 	private:
 			int parse_frame(int numbytes, uint8_t* buf, MacAddress& a_mac, Variable& value );
+			int parse_frames(int numbytes, uint8_t* buf, MacAddress& a_mac, std::vector<Variable*>& r_values );
 	private:
 		std::string m_if;
 		struct ifreq if_mac;
@@ -73,6 +87,8 @@ class EapProtocol
 		int m_sockfd;
 		struct sockaddr_ll socket_address;
 	private:
+		uint32_t m_version;
+		int publisherId[6];
 		int cycleIndex;		//current cycle index
 	public:
 		bool m_setup;
