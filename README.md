@@ -16,6 +16,7 @@ See more on https://www.ethercat.org/en/downloads/downloads_BB6D7FF18F2B47DDB347
 
 Build instructions
 ------------------
+make -C dependencies/moderncpp.git lib
 cd src; make
 
 
