@@ -17,35 +17,34 @@
 
 #define NETWORK_VAR 4
 
-
-struct eapframe {
-	uint8_t dst[6];
-	uint8_t src[6];
-	uint16_t type;
-	struct {
-		uint16_t length:11;
-		uint16_t valid:1;
-		uint16_t type:3;
-	}echeader;
-	/* PAYLOAD */
-	struct {
-		uint8_t publisher[6];
-		uint16_t count;
-		uint16_t cycleix;
-	}networkvars;
-	uint16_t padding;
+struct ethercatframe_s {
+    uint8_t dst[6];
+    uint8_t src[6];
+    uint16_t type;
+    struct {
+        uint16_t length:11;
+        uint16_t valid:1;
+        uint16_t type:3;
+    }echeader __attribute__((packed));
 } __attribute__((packed));
 
-struct networkvar {
-	struct {
-		uint16_t id;
-		uint16_t hash;
-		uint16_t len;
-		uint16_t quality;
-	}nvheader;
-	/* payload data */
-	uint8_t d;
+/* Process data frame header */
+struct processdata_s {
+        uint8_t publisher[6];
+        uint16_t pdocount;
+        uint16_t cycleix;
+        uint8_t res;
+        uint8_t eapsm;
+}__attribute__((packed));
+
+struct pdo_s {
+        uint16_t id;
+        uint16_t hash;
+        uint16_t len;
+        uint16_t quality;
+        /* payload data */
 } __attribute__((packed));
+
 
 
 #endif

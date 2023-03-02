@@ -42,6 +42,7 @@ static void help(char* app )
 		printf("   -l                   ; sniff mode\n");
 		printf("   -r                   ; raw mode\n");
 		printf("   -v                   ; verbose \n");
+		printf("   -s <size>            ; size {1/2/4/8} \n");
 		printf("   -r <no>              ; read no \n");
 		printf("   -t <no> <value>      ; write no=value\n");
 		printf("   -m <mac>             ; listen for data from node with mac, giving mac of all zeros will show all nodes, ignoring src mac \n");
@@ -49,7 +50,7 @@ static void help(char* app )
 
 		printf("note: provided mac addresses, set all bytes i.e. 00:01...\n");
 		printf("Examples:\n");
-		printf(" sudo %s -i enx9886e302239a -t \"123 461\" ; Send nvid 123 = 461\n",app);
+		printf(" sudo %s -i enx9886e302239a -t \"123 461\" -s2 ; Send nvid 123 = 461, where 123 is size 2bytes\n",app);
 		printf(" sudo %s -i enx9885e302240a -R 125 ;  Read nvid 125\n",app);
 		printf(" sudo %s -i enp1s0 -b ; start in background\n", app);
 
@@ -59,6 +60,7 @@ int main(int argc, char *argv[])
 {
 		int publisherId[6];
 		MacAddress dst;
+		size_t txsize=0;
 		bool setpublisher=false;
 		bool verbose=false;
 		bool usethread=false;
@@ -81,7 +83,7 @@ int main(int argc, char *argv[])
 		dst.f = MY_DEST_MAC5;
 
 		strcpy(ifName, DEFAULT_IF);
-		while ((c = getopt (argc, argv, "i:lhm:t:rR:vbp:q")) != -1) {
+		while ((c = getopt (argc, argv, "i:lhm:t:rR:vbp:qs:")) != -1) {
 				switch (c)
 				{
 						case 'q':
@@ -119,6 +121,11 @@ int main(int argc, char *argv[])
 										txdata = optarg;
 										todo = SEND;
 								}break;
+						case 's':
+								{
+										txsize = atoi(optarg);
+								}break;
+
 						case 'R':
 								{
 										readvar = atoi(optarg);
@@ -185,6 +192,10 @@ int main(int argc, char *argv[])
 									{
 										printf("%d\n", value.value.u32 );
 									}break;
+									default:
+									{
+										printf("size %d not implemented\n", value.size );
+									}break;
 								}
 						}break;
 				case SEND:
@@ -194,8 +205,9 @@ int main(int argc, char *argv[])
 								sscanf(txdata,"%d %d", &nvid, &data );
 								Variable value;
 								value.id = nvid;
-								value.size = sizeof(uint32_t);
+								value.size = txsize;
 								value.value.u32 = data;
+								printf("Value .id=%d .value=%d .size=%d\n", value.id, value.value.u32, value.size );
 								p.setNetworkVariable( dst, value);
 						}break;
 				case SNIFF:
