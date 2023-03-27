@@ -1,4 +1,5 @@
-OBJS=main.o eth.o protocol.o
+LIBOBJS=protocol.o eth.o
+OBJS=main.o $(LIBOBJS)
 LIBS=-lpthread ../dependencies/moderncpp.git/libmf.a -lzmq 
 
 FLAGS=-g -Wall
@@ -17,8 +18,13 @@ INCLUDE=\
 eaptool:$(OBJS)
 	g++ $(FLAGS) $(OBJS) $(LIBS) -o eaptool
 
+lib: $(LIBOBJS)
+	ar -crs libeap.a $(LIBOBJS)
+
+
 all: eaptool
 
 clean:
 	rm -f *.o
 	rm -f eaptool
+	rm -f libeap.a
