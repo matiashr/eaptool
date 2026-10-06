@@ -90,7 +90,7 @@ bool EapProtocol::setup()
 		} else {
 				if( m_verbose) {
 				printf("Mymac:");
-				dumpmac( (uint8_t*)if_mac.ifr_hwaddr.sa_data );printf("\n");
+				//dumpmac( (uint8_t*)if_mac.ifr_hwaddr.sa_data );printf("\n");
 				}
 		}
 		return m_setup;
